@@ -30,11 +30,11 @@ critical.
 
 | Metric | Acceptable Low Score Scenario | Critical Low Score Scenario | Action Required |
 |---|---|---|---|
-| Faithfulness | | | |
-| Answer Relevance | | | |
-| Context Recall | | | |
-| Context Precision | | | |
-| Completeness | | | |
+| Faithfulness | Câu trả lời có ghi rõ đây là giả thuyết hoặc từ chối hợp lý vì corpus không có dữ liệu | Trình bày thông tin không có evidence như sự thật, nhất là chính sách/giá/bảo hành | Kiểm tra claim với gold evidence, prompt buộc trích nguồn hoặc từ chối khi thiếu evidence |
+| Answer Relevance | Câu hỏi mơ hồ hoặc ngoài phạm vi nên câu trả lời ngắn để hỏi lại/chuyển tuyến | Câu hỏi trong phạm vi nhưng câu trả lời lạc đề, không giải quyết ý định chính | Kiểm tra intent routing, prompt và các mẫu hỏi thất bại |
+| Context Recall | Expected answer chứa nhiều ý nhưng retriever chỉ bỏ sót một chi tiết ít quan trọng | Thiếu đoạn chứa điều kiện quyết định đáp án, khiến câu trả lời đúng không thể sinh ra | Kiểm tra query, chunking, top-k và bổ sung case vào regression set |
+| Context Precision | Corpus có nhiều đoạn gần giống nên có noise ở cuối danh sách nhưng evidence đúng vẫn xếp đầu | Noise xếp trước evidence, hoặc phần lớn chunks không liên quan làm generator dễ nhiễu | Kiểm tra ranking; cải thiện filter/reranker và đo Precision theo thứ hạng |
+| Completeness | Trả lời cố ý ngắn nhưng đã đủ hành động chính; thiếu chi tiết tùy chọn | Bỏ sót điều kiện, ngoại lệ hoặc bước bắt buộc làm người dùng hành động sai | So sánh theo từng expected claim, sửa prompt và thêm checklist domain |
 
 ### Exercise 1.2 — Bias trong LLM-as-a-Judge
 
@@ -46,15 +46,15 @@ Ba bias thường gặp:
 
 **Câu 1: Thiết kế experiment phát hiện position bias với ít nhất hai conditions.**
 
-> *Câu trả lời:*
+> *Câu trả lời:* Với cùng một question và hai answer A/B có chất lượng tương đương, chạy ít nhất hai conditions: (1) A đứng trước B và (2) B đứng trước A; giữ nguyên rubric, prompt và tham số model. Lặp lại trên nhiều cặp, tốt hơn nữa với thứ tự được random hóa và ID answer ẩn danh. So sánh tỷ lệ thắng/điểm của từng answer giữa hai thứ tự; nếu answer đổi điểm hoặc winner chỉ vì đổi vị trí thì có position bias.
 
 **Câu 2: Làm thế nào giảm verbosity bias bằng rubric design?**
 
-> *Câu trả lời:*
+> *Câu trả lời:* Rubric phải chấm theo các claim/tiêu chí quan sát được thay vì độ dài: đúng, có evidence, đủ các ý bắt buộc và liên quan. Nêu rõ “không cộng điểm cho lặp lại hoặc chi tiết ngoài yêu cầu”, giới hạn phạm vi câu trả lời và dùng thang điểm có anchor/example cho response ngắn nhưng đầy đủ. Có thể yêu cầu judge trích claim hỗ trợ cho từng điểm trước khi tổng hợp.
 
 **Câu 3: Tại sao cần calibrate LLM judge với human labels?**
 
-> *Câu trả lời:*
+> *Câu trả lời:* LLM judge có thể chấm lệch hệ thống dù kết quả trông nhất quán. Human labels từ nhiều người chấm và guideline thống nhất tạo mốc tham chiếu để đo agreement, phát hiện bias/độ nghiêm khắc và chọn prompt, model hoặc ngưỡng phù hợp. Cần calibrate định kỳ trên các edge cases mới, không chỉ một lần.
 
 ### Exercise 1.3 — Evaluation trong CI/CD
 
@@ -62,13 +62,13 @@ Ba bias thường gặp:
 
 | Metric | Threshold | Lý do |
 |---|---:|---|
-| Faithfulness | | |
-| Answer Relevance | | |
-| Completeness | | |
+| Faithfulness | 0.80 | Claim không được grounding có rủi ro đưa sai chính sách; đây là gate nghiêm nhất. |
+| Answer Relevance | 0.75 | Bảo đảm câu trả lời giải quyết đúng intent nhưng vẫn chừa biên cho cách diễn đạt khác nhau. |
+| Completeness | 0.75 | Chặn bản phát hành bỏ sót các điều kiện/bước quan trọng mà không ép mọi câu trả lời phải dài. |
 
 **Câu 2: Khi nào dùng offline evaluation, online evaluation và human review?**
 
-> *Câu trả lời:*
+> *Câu trả lời:* Dùng offline evaluation trên golden/regression dataset trước merge và deployment vì lặp lại được, rẻ và không ảnh hưởng người dùng. Dùng online evaluation sau rollout có kiểm soát để theo dõi dữ liệu thật, drift, latency, escalation và feedback/A-B metrics mà offline khó mô phỏng. Dùng human review để tạo/calibrate nhãn, xét các case rủi ro cao hoặc mơ hồ, và audit mẫu các quyết định của LLM judge. Quality gate đề xuất: block nếu bất kỳ metric nào thấp hơn ngưỡng trên; đồng thời theo dõi trung bình và không cho phép regression đáng kể so với baseline. Retrieval metrics được theo dõi riêng để chẩn đoán, không đưa vào công thức `overall_score()`.
 
 ---
 
@@ -146,31 +146,31 @@ và quyết định thiết kế, không chép lại toàn bộ QA.
 
 | Hạng mục | Kết quả |
 |---|---|
-| Tổng số records | ____ / 20 |
-| Easy | ____ / 5 |
-| Medium | ____ / 7 |
-| Hard | ____ / 5 |
-| Adversarial | ____ / 3 |
-| Source documents được sử dụng | ____ / 10 |
-| Validator status | PASS / FAIL |
+| Tổng số records | 20 / 20 |
+| Easy | 5 / 5 |
+| Medium | 7 / 7 |
+| Hard | 5 / 5 |
+| Adversarial | 3 / 3 |
+| Source documents được sử dụng | 10 / 10 |
+| Validator status | PASS |
 
 **Ba case đại diện cho quyết định thiết kế**
 
 | ID | Difficulty | Source document(s) | Vì sao case phù hợp với difficulty/attack type? |
 |---|---|---|---|
-| | | | |
-| | | | |
-| | | | |
+| E01 | Easy | `01_product_catalog.md` | Tra cứu trực tiếp một đoạn catalog để lấy ports, memory, storage và yêu cầu sạc của NovaBook 14; không cần kết hợp chính sách. |
+| H01 | Hard | `09_escalation_and_policy_updates.md` | Phải chọn policy version theo ngày đặt hàng, nhưng đếm số ngày từ delivery, đồng thời không áp dụng ngược quyền lợi OrbitPlus 45 ngày. |
+| A02 | Adversarial | `00_system_scope.md` | Prompt yêu cầu bỏ system rules, tiết lộ dữ liệu ẩn và xin credentials; đáp án phải giữ quy tắc ưu tiên và từ chối đúng các dữ liệu bị cấm. |
 
 **Điểm khó nhất khi xây dựng expected answer hoặc evidence là gì?**
 
-> *Câu trả lời:*
+> *Câu trả lời:* Khó nhất là giữ đồng thời đúng triggering date, thời điểm bắt đầu đếm và ngoại lệ không hồi tố ở H01. Chỉ trích một câu về cửa sổ 21 ngày là chưa đủ; expected answer cần evidence cho cả order-placement date, confirmed delivery và việc OrbitPlus 45 ngày không áp dụng cho đơn trước 01/09/2026. Các case kết hợp return/warranty và membership/repair cũng được tách claim để mỗi điều kiện đều truy ngược được về đoạn nguồn tương ứng.
 
 **Xác nhận:**
 
-- [ ] Mọi claim trong expected answer đều có evidence hỗ trợ.
-- [ ] Không có questions trùng ý và không dùng kiến thức ngoài corpus.
-- [ ] `python validate_golden_dataset.py` báo `PASS`.
+- [x] Mọi claim trong expected answer đều có evidence hỗ trợ.
+- [x] Không có questions trùng ý và không dùng kiến thức ngoài corpus.
+- [x] `python validate_golden_dataset.py` báo `PASS`.
 
 ### Exercise 3.2 — Benchmark Run
 
@@ -185,47 +185,47 @@ Copy bảng terminal vào đây hoặc điền từ `artifacts/benchmark_results
 
 | ID | Question (short) | Ctx Recall | Ctx Precision | Faithfulness | Relevance | Completeness | Overall | Passed? | Failure Type |
 |---|---|---:|---:|---:|---:|---:|---:|---|---|
-| E01 | | | | | | | | | |
-| E02 | | | | | | | | | |
-| E03 | | | | | | | | | |
-| E04 | | | | | | | | | |
-| E05 | | | | | | | | | |
-| M01 | | | | | | | | | |
-| M02 | | | | | | | | | |
-| M03 | | | | | | | | | |
-| M04 | | | | | | | | | |
-| M05 | | | | | | | | | |
-| M06 | | | | | | | | | |
-| M07 | | | | | | | | | |
-| H01 | | | | | | | | | |
-| H02 | | | | | | | | | |
-| H03 | | | | | | | | | |
-| H04 | | | | | | | | | |
-| H05 | | | | | | | | | |
-| A01 | | | | | | | | | |
-| A02 | | | | | | | | | |
-| A03 | | | | | | | | | |
+| E01 | NovaBook specifications | 0.939 | 0.700 | 0.838 | 0.667 | 0.939 | 0.815 | Yes | - |
+| E02 | OrbitPay eligibility and schedule | 0.880 | 1.000 | 0.426 | 0.833 | 0.800 | 0.686 | No | off_topic |
+| E03 | Standard shipping time | 0.900 | 1.000 | 0.909 | 0.600 | 0.550 | 0.686 | Yes | - |
+| E04 | Warranty durations | 1.000 | 1.000 | 0.839 | 0.778 | 0.920 | 0.845 | Yes | - |
+| E05 | Credentials staff never request | 0.760 | 0.833 | 0.650 | 0.727 | 0.400 | 0.592 | No | off_topic |
+| M01 | Stack member and promo discounts | 0.870 | 1.000 | 0.812 | 0.786 | 0.565 | 0.721 | Yes | - |
+| M02 | Cancel/edit Packing order | 0.968 | 1.000 | 0.767 | 0.667 | 0.516 | 0.650 | Yes | - |
+| M03 | Delayed package and carrier trace | 0.917 | 1.000 | 0.848 | 0.900 | 0.583 | 0.777 | Yes | - |
+| M04 | Device return preparation | 0.931 | 0.887 | 0.765 | 0.750 | 0.897 | 0.804 | Yes | - |
+| M05 | Repair timing and escalation | 0.914 | 0.887 | 0.789 | 0.818 | 0.743 | 0.784 | Yes | - |
+| M06 | Compromised account and order | 0.923 | 0.700 | 0.767 | 0.800 | 0.885 | 0.817 | Yes | - |
+| M07 | Promotional bundle return | 0.903 | 0.867 | 0.609 | 0.800 | 0.452 | 0.620 | No | off_topic |
+| H01 | Pre-policy-change return window | 0.867 | 1.000 | 0.826 | 0.765 | 0.533 | 0.708 | Yes | - |
+| H02 | Defect inside opened return window | 0.846 | 0.887 | 0.618 | 1.000 | 0.692 | 0.770 | Yes | - |
+| H03 | Replacement warranty duration | 0.967 | 1.000 | 0.941 | 0.636 | 0.533 | 0.704 | Yes | - |
+| H04 | OrbitPlus repair loaner | 0.826 | 1.000 | 0.667 | 0.818 | 0.783 | 0.756 | Yes | - |
+| H05 | Late express-delivery exception | 0.667 | 0.867 | 0.444 | 0.562 | 0.375 | 0.461 | No | off_topic |
+| A01 | Medical and investment request | 0.464 | 1.000 | 0.167 | 0.364 | 0.214 | 0.248 | No | hallucination |
+| A02 | Prompt injection and credentials | 0.938 | 1.000 | 0.000 | 0.000 | 0.031 | 0.010 | No | hallucination |
+| A03 | False premise about capabilities | 0.897 | 1.000 | 0.500 | 0.500 | 0.379 | 0.460 | No | off_topic |
 
 **Aggregate Report**
 
-- Overall pass rate: ____%
-- Avg Context Recall: ____
-- Avg Context Precision: ____
-- Avg Faithfulness: ____
-- Avg Relevance: ____
-- Avg Completeness: ____
-- Failure type distribution: ____
+- Overall pass rate: 65.0%
+- Avg Context Recall: 0.869
+- Avg Context Precision: 0.931
+- Avg Faithfulness: 0.659
+- Avg Relevance: 0.689
+- Avg Completeness: 0.590
+- Failure type distribution: `{"off_topic": 5, "hallucination": 2}`
 
 **Ba cases có Overall Score thấp nhất**
 
-1. ID: ____ | Score: ____ | Failure type: ____
-2. ID: ____ | Score: ____ | Failure type: ____
-3. ID: ____ | Score: ____ | Failure type: ____
+1. ID: A02 | Score: 0.010 | Failure type: hallucination
+2. ID: A01 | Score: 0.248 | Failure type: hallucination
+3. ID: A03 | Score: 0.460 | Failure type: off_topic
 
 **Nhận xét ngắn:** Metric nào yếu nhất? Kết quả gợi ý vấn đề nằm ở retrieval
 hay generation?
 
-> *Câu trả lời:*
+> *Câu trả lời:* Completeness thấp nhất (0.589), trong khi Context Recall (0.869) và Context Precision (0.931) đều cao, nên hướng điều tra chính là generation chưa phủ đủ expected claims và hạn chế của metric lexical, không phải retrieval toàn cục. Trace xác nhận A02 đã lấy đúng OT-00-P04 ở hạng đầu nhưng actual answer chỉ nói “I'm unable to assist with that”, vì vậy completeness/relevance gần 0 là hợp lý. Ngược lại, A01 từ chối đúng và H05 trả lời đúng ngoại lệ nhưng vẫn bị điểm thấp do paraphrase và expected answer dài hơn; nhãn `hallucination`/`off_topic` ở đây không đủ chứng minh lỗi ngữ nghĩa. Cần đọc actual answer cùng evidence, đồng thời cải thiện prompt để câu từ chối nêu rõ giới hạn và chủ đề hỗ trợ, trước khi kết luận hoặc đổi retriever.
 
 ### Exercise 3.3 — LLM-as-a-Judge Rubric Design
 
@@ -234,35 +234,35 @@ Thiết kế rubric domain-specific cho OrbitTech Customer Support. Mỗi mức 
 
 Chọn 3–5 dimensions:
 
-- [ ] Correctness
-- [ ] Completeness
-- [ ] Relevance
-- [ ] Evidence/citation
-- [ ] Actionability
+- [x] Correctness
+- [x] Completeness
+- [x] Relevance
+- [x] Evidence/citation
+- [x] Actionability
 - [ ] Safety/privacy
 - [ ] Tone/clarity
 - [ ] Dimension khác: __________
 
 | Score | Tiêu chí domain-specific | Ví dụ response |
 |---:|---|---|
-| 5 | | |
-| 4 | | |
-| 3 | | |
-| 2 | | |
-| 1 | | |
+| 5 | Correctness: mọi claim và điều kiện/ngoại lệ khớp corpus. Completeness: đủ mọi ý cần để quyết định. Relevance: trả lời thẳng intent, không có nội dung thừa gây nhiễu. Evidence: claim truy được về đúng tài liệu/đoạn nguồn. Actionability: nêu bước tiếp theo an toàn, khả thi và đúng thẩm quyền của assistant. | “Đơn đặt 30/8 dùng v1.0: thiết bị chưa mở có 21 ngày từ confirmed delivery; quyền lợi OrbitPlus 45 ngày không hồi tố.” |
+| 4 | Đáp án đúng và hữu ích ở cả 5 dimensions nhưng thiếu một chi tiết phụ không làm thay đổi quyết định, hoặc nguồn được diễn giải đúng nhưng chưa chỉ rõ. Không có claim sai hay hành động rủi ro. | Nêu đúng cửa sổ 21 ngày và không áp dụng 45 ngày, nhưng không nói rõ số ngày được đếm từ confirmed delivery. |
+| 3 | Nắm đúng kết luận chính nhưng thiếu một điều kiện/ngoại lệ quan trọng, evidence chỉ hỗ trợ một phần, hoặc bước tiếp theo còn chung chung. Người dùng cần hỏi lại trước khi hành động. | “Đơn cũ dùng chính sách 21 ngày,” nhưng không xét membership hoặc ngày bắt đầu đếm. |
+| 2 | Có một phần liên quan nhưng chứa lỗi chính sách đáng kể, bỏ sót phần lớn yêu cầu, viện dẫn sai nguồn hoặc đề xuất bước mà assistant không thể thực hiện. Chưa có vi phạm an toàn nghiêm trọng. | “Bạn có 30 ngày và tôi đã chấp thuận return,” dù đơn đặt trước 1/9 và assistant không thể phê duyệt. |
+| 1 | Sai/lạc đề hoặc bịa thông tin; evidence không hỗ trợ kết luận; đưa chỉ dẫn nguy hiểm, xâm phạm riêng tư, tiết lộ dữ liệu, xin credentials, hay tuyên bố đã thực hiện hành động bị cấm. | “Gửi mật khẩu và OTP để tôi mở tài khoản và hoàn tiền ngay.” |
 
 **Ba edge cases khó chấm**
 
 | Edge Case | Tại sao khó chấm? | Rubric xử lý thế nào? |
 |---|---|---|
-| | | |
-| | | |
-| | | |
+| Câu trả lời ngắn nhưng đủ mọi điều kiện | Dễ bị verbosity bias chấm thấp hơn một câu dài lặp lại corpus. | Chấm theo coverage của required claims; không cộng điểm vì độ dài, diễn giải hay lặp lại. |
+| Đúng chính sách nhưng không nêu tên file nguồn | Nội dung có thể grounded hoàn toàn dù trải nghiệm chat không cần citation hình thức. | Evidence dimension chấm khả năng truy vết claim; thiếu tên file chỉ là thiếu sót nhỏ nếu trace xác nhận đúng nguồn. |
+| Từ chối prompt injection nhưng không trả lời phần hỗ trợ hợp lệ đi kèm | Từ chối là an toàn nhưng có thể chưa complete/actionable. | Cho điểm cao Correctness/Evidence, nhưng giảm Completeness và Actionability nếu bỏ qua phần OrbitTech an toàn có thể trả lời. |
 
 **Bias controls:** Rubric hoặc evaluation protocol của bạn giảm position bias,
 verbosity bias và self-preference bằng cách nào?
 
-> *Câu trả lời:*
+> *Câu trả lời:* Ẩn danh answer và randomize/counterbalance thứ tự A/B; chấm lại với thứ tự đảo và gắn cờ khi winner thay đổi để giảm position bias. Rubric tách 5 dimensions thành required claims quan sát được, nêu rõ không cộng điểm cho độ dài, văn phong hoa mỹ hoặc lặp lại để giảm verbosity bias. Calibrate judge bằng human labels trên cùng edge cases, dùng model/judge khác family khi có thể, và audit disagreement để giảm self-preference. Nhiều judges dùng cùng rubric, nhiệt độ thấp và thứ tự dimension cố định; báo từng dimension trước khi tổng hợp, không để một ấn tượng chung che lỗi policy hoặc evidence.
 
 ### Exercise 3.4 — Framework Comparison (Bonus +5)
 
